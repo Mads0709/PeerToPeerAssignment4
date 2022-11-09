@@ -8,8 +8,8 @@ import (
 	"net"
 	"os"
 	"strconv"
-   
-	ping "github.com/Mads0709/PeerToPeerAssignment4/grpc"
+    
+	ping "github.com/Mads0709/PeerToPeerAssignment4.git/grpc"
 	"google.golang.org/grpc"
 )
 
