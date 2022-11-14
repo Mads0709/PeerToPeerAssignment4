@@ -79,10 +79,12 @@ func main() {
 	}
 }
 
-func (p *peer) Ping(ctx context.Context, req *ping.Request) (*ping.Reply, error) {
+func (p *peer) Ping(ctx context.Context, req *ping.Request) (*ping.Reply, error) { //evaluate request
 	id := req.Id
 	p.amountOfPings[id] += 1 //kan slettes
 	p.timestamp += 1
+	//var channel = make(chan bool, 1)
+	fmt.Printf("req.Timestamp: %v , p.timestamp: %v \n", req.Timestamp, p.timestamp)
 
 	for { //Her skal peern evaluere requesten før han giver grønt lys
 		if req.Timestamp < p.timestamp {
@@ -94,15 +96,16 @@ func (p *peer) Ping(ctx context.Context, req *ping.Request) (*ping.Reply, error)
 			return rep, nil
 		}
 		//vænter på at vedkommende i critcal section er færdig
+		// fmt.Printf("id: %v , cannot access critical section", req.Id)
 		rep := &ping.Reply{Answer: p.timestamp}
 		return rep, nil
+		//<-channel
 	}
 }
 
-func (p *peer) Done(ctx context.Context, dn *ping.DoneMessage) (*ping.Reply, error) {
+// func (p *peer) Done(ctx context.Context, dn *ping.DoneMessage) (*ping.Reply, error) {
 
-	
-}
+// }
 
 func (p *peer) sendPingToAll() {
 	request := &ping.Request{Id: p.id, Timestamp: p.timestamp}
@@ -123,11 +126,10 @@ func (p *peer) sendPingToAll() {
 	}
 }
 
-
 func (p *peer) criticalSection() {
 	p.criticalSectionAccessCounter += 1
 	fmt.Printf("id: %v is in the critical section and has a csCounter of: %v\n", p.id, p.criticalSectionAccessCounter)
-	time.Sleep(12 * time.Second) //sleep således at man menneskeligt kan nå at requeste fra de andre terminaler
+	time.Sleep(7 * time.Second) //sleep således at man menneskeligt kan nå at requeste fra de andre terminaler
 	fmt.Printf("id: %v is done\n", p.id)
 	//Her skal peeren signalere til de andre peers at den er færdig med criticalSection
 }
