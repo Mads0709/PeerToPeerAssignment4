@@ -97,8 +97,8 @@ func (p *peer) Ping(ctx context.Context, req *ping.Request) (*ping.Reply, error)
 		}
 		//vænter på at vedkommende i critcal section er færdig
 		// fmt.Printf("id: %v , cannot access critical section", req.Id)
-		rep := &ping.Reply{Answer: p.timestamp}
-		return rep, nil
+		// rep := &ping.Reply{Answer: p.timestamp}
+		// return rep, nil
 		//<-channel
 	}
 }
