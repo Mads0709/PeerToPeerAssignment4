@@ -16,7 +16,8 @@ message Request {
 }
 
 message Reply {
-    int32 answer = 1;
+    int32 id = 1;
+    int32 answer = 2;
 }
 
 //Done with critical section message
