@@ -24,6 +24,7 @@ type peer struct {
 	timestamp                    int32
 	criticalSectionAccessCounter int32
 	wantsToAccessCriticalSection bool
+	isInCriticalSection          bool
 }
 
 func main() {
@@ -40,6 +41,7 @@ func main() {
 		timestamp:                    0,
 		criticalSectionAccessCounter: 0,
 		wantsToAccessCriticalSection: false,
+		isInCriticalSection:          false,
 	}
 
 	// Create listener tcp on port ownPort
@@ -64,7 +66,6 @@ func main() {
 		}
 
 		var conn *grpc.ClientConn
-		fmt.Printf("Trying to dial: %v\n", port)
 		conn, err := grpc.Dial(fmt.Sprintf(":%v", port), grpc.WithInsecure(), grpc.WithBlock())
 		if err != nil {
 			log.Fatalf("Could not connect: %s\n", err)
@@ -86,7 +87,7 @@ func main() {
 
 func (p *peer) Ping(ctx context.Context, req *ping.Request) (*ping.Reply, error) { //evaluate request
 	p.timestamp += 1
-	fmt.Printf("req.Timestamp: %v , p.timestamp: %v \n", req.Timestamp, p.timestamp)
+	fmt.Printf("req Timestamp: %v , my timestamp: %v \n", req.Timestamp, p.timestamp)
 	wgDefer.Add(1)
 
 	if p.wantsToAccessCriticalSection {
@@ -100,7 +101,6 @@ func (p *peer) Ping(ctx context.Context, req *ping.Request) (*ping.Reply, error)
 			return rep, nil
 		}
 
-		wgDefer.Wait() //Waits for a peer to leave the critical section
 	}
 
 	rep := &ping.Reply{Answer: p.timestamp, Id: p.id}
@@ -133,20 +133,23 @@ func (p *peer) sendPingToAll() {
 			fmt.Printf("Reply from: %v timestamp: %v\n", reply.Id, reply.Answer)
 			wgRequests.Done()
 		}()
-		fmt.Printf("My timestamp: %v\n", p.timestamp)
+		//fmt.Printf("My timestamp: %v\n", p.timestamp)
+		time.Sleep(2 * time.Second)
 	}
 	wgRequests.Wait()
+	wgDefer.Wait()
 	p.criticalSection()
 
 }
 
 func (p *peer) criticalSection() {
 	p.criticalSectionAccessCounter += 1
-	fmt.Printf("------------------------------------------\n")
-	fmt.Printf("id: %v in critical section, csCounter of: %v\n", p.id, p.criticalSectionAccessCounter)
-	time.Sleep(7 * time.Second)
-	fmt.Printf("id: %v is done\n", p.id)
-	fmt.Printf("------------------------------------------\n")
+	log.SetFlags(log.Ltime)
+	log.Printf("has entered critical section------")
+
+	time.Sleep(5 * time.Second)
+
+	log.Printf("has exited critical section------")
 	p.wantsToAccessCriticalSection = false
 
 	doneMessage := &ping.DoneMessage{DoneBool: true} //here you signal to the other peers that you are done with the critical section
