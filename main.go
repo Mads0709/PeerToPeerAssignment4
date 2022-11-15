@@ -81,10 +81,6 @@ func main() {
 	}
 }
 
-//****************************************************************
-//****************************************************************
-//****************************************************************
-
 func (p *peer) Ping(ctx context.Context, req *ping.Request) (*ping.Reply, error) { //evaluate request
 	p.timestamp += 1
 	fmt.Printf("req Timestamp: %v , my timestamp: %v \n", req.Timestamp, p.timestamp)
@@ -120,14 +116,6 @@ func (p *peer) Ping(ctx context.Context, req *ping.Request) (*ping.Reply, error)
 
 var wgRequests sync.WaitGroup
 var wgDefer sync.WaitGroup
-
-func (p *peer) Done(ctx context.Context, dm *ping.DoneMessage) (*ping.Reply, error) {
-	fmt.Printf("Done recived\n")
-	rep := &ping.Reply{Answer: p.timestamp}
-	wgDefer.Done()
-
-	return rep, nil
-}
 
 func (p *peer) sendPingToAll() {
 
@@ -165,10 +153,5 @@ func (p *peer) criticalSection() {
 		wgDefer.Done()
 	}
 	p.requesting = false
-
-	// doneMessage := &ping.DoneMessage{DoneBool: true} //here you signal to the other peers that you are done with the critical section
-	// for _, client := range p.clients {
-	// 	client.Done(p.ctx, doneMessage)
-	// }
 
 }
