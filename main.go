@@ -19,11 +19,11 @@ import (
 type peer struct {
 	ping.UnimplementedPingServer
 	id                           int32
-	amountOfPings                map[int32]int32
 	clients                      map[int32]ping.PingClient
 	ctx                          context.Context
 	timestamp                    int32
 	criticalSectionAccessCounter int32
+	wantsToAccessCriticalSection bool
 }
 
 func main() {
@@ -39,6 +39,7 @@ func main() {
 		ctx:                          ctx,
 		timestamp:                    0,
 		criticalSectionAccessCounter: 0,
+		wantsToAccessCriticalSection: false,
 	}
 
 	// Create listener tcp on port ownPort
@@ -75,7 +76,7 @@ func main() {
 
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
-		pe.sendPingToAll() //Here a peer sends an acces to critical section request every time you write in the terminal
+		go pe.sendPingToAll() //Here a peer sends an acces to critical section request every time you write in the terminal
 	}
 }
 
@@ -86,18 +87,21 @@ func main() {
 func (p *peer) Ping(ctx context.Context, req *ping.Request) (*ping.Reply, error) { //evaluate request
 	p.timestamp += 1
 	fmt.Printf("req.Timestamp: %v , p.timestamp: %v \n", req.Timestamp, p.timestamp)
-
-	if req.Timestamp < p.timestamp {
-		rep := &ping.Reply{Answer: p.timestamp, Id: p.id}
-		return rep, nil
-	}
-	if req.Timestamp == p.timestamp && req.Id < p.id {
-		rep := &ping.Reply{Answer: p.timestamp, Id: p.id}
-		return rep, nil
-	}
-
 	wgDefer.Add(1)
-	wgDefer.Wait()
+
+	if p.wantsToAccessCriticalSection {
+
+		if req.Timestamp < p.timestamp {
+			rep := &ping.Reply{Answer: p.timestamp, Id: p.id}
+			return rep, nil
+		}
+		if req.Timestamp == p.timestamp && req.Id < p.id {
+			rep := &ping.Reply{Answer: p.timestamp, Id: p.id}
+			return rep, nil
+		}
+
+		wgDefer.Wait() //Waits for a peer to leave the critical section
+	}
 
 	rep := &ping.Reply{Answer: p.timestamp, Id: p.id}
 	return rep, nil
@@ -107,22 +111,26 @@ func (p *peer) Ping(ctx context.Context, req *ping.Request) (*ping.Reply, error)
 var wgRequests sync.WaitGroup
 var wgDefer sync.WaitGroup
 
-func Done(ctx context.Context, dm *ping.DoneMessage) {
-	fmt.Printf("release")
+func (p *peer) Done(ctx context.Context, dm *ping.DoneMessage) (*ping.Reply, error) {
+	fmt.Printf("Done recived\n")
+	rep := &ping.Reply{Answer: p.timestamp}
 	wgDefer.Done()
+
+	return rep, nil
 }
 
 func (p *peer) sendPingToAll() {
+	p.wantsToAccessCriticalSection = true
 	request := &ping.Request{Id: p.id, Timestamp: p.timestamp}
 	for _, client := range p.clients {
 
+		wgRequests.Add(1)
 		go func() {
-			wgRequests.Add(1)
 			reply, err := client.Ping(p.ctx, request) //Here the ping function is called
 			if err != nil {
 				fmt.Println("something went wrong")
 			}
-			fmt.Printf("Got reply from id: %v timestamp: %v\n", reply.Id, reply.Answer)
+			fmt.Printf("Reply from: %v timestamp: %v\n", reply.Id, reply.Answer)
 			wgRequests.Done()
 		}()
 		fmt.Printf("My timestamp: %v\n", p.timestamp)
@@ -134,10 +142,12 @@ func (p *peer) sendPingToAll() {
 
 func (p *peer) criticalSection() {
 	p.criticalSectionAccessCounter += 1
-	fmt.Printf("id: %v is in the critical section and has a csCounter of: %v\n", p.id, p.criticalSectionAccessCounter)
+	fmt.Printf("------------------------------------------\n")
+	fmt.Printf("id: %v in critical section, csCounter of: %v\n", p.id, p.criticalSectionAccessCounter)
 	time.Sleep(7 * time.Second)
 	fmt.Printf("id: %v is done\n", p.id)
-	
+	fmt.Printf("------------------------------------------\n")
+	p.wantsToAccessCriticalSection = false
 
 	doneMessage := &ping.DoneMessage{DoneBool: true} //here you signal to the other peers that you are done with the critical section
 	for _, client := range p.clients {
