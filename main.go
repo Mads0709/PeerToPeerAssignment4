@@ -23,8 +23,8 @@ type peer struct {
 	ctx                          context.Context
 	timestamp                    int32
 	criticalSectionAccessCounter int32
-	wantsToAccessCriticalSection bool
-	isInCriticalSection          bool
+	requesting                   bool
+	defering                     bool
 }
 
 func main() {
@@ -40,8 +40,8 @@ func main() {
 		ctx:                          ctx,
 		timestamp:                    0,
 		criticalSectionAccessCounter: 0,
-		wantsToAccessCriticalSection: false,
-		isInCriticalSection:          false,
+		requesting:                   false,
+		defering:                     false,
 	}
 
 	// Create listener tcp on port ownPort
@@ -90,16 +90,26 @@ func (p *peer) Ping(ctx context.Context, req *ping.Request) (*ping.Reply, error)
 	fmt.Printf("req Timestamp: %v , my timestamp: %v \n", req.Timestamp, p.timestamp)
 	wgDefer.Add(1)
 
-	if p.wantsToAccessCriticalSection {
+	if p.requesting {
 
 		if req.Timestamp < p.timestamp {
 			rep := &ping.Reply{Answer: p.timestamp, Id: p.id}
 			return rep, nil
 		}
+
 		if req.Timestamp == p.timestamp && req.Id < p.id {
 			rep := &ping.Reply{Answer: p.timestamp, Id: p.id}
+			p.timestamp += 1
 			return rep, nil
 		}
+
+		if req.Timestamp > p.timestamp {
+			p.timestamp = req.Timestamp + 1
+		}
+
+		p.defering = true
+		wgDefer.Add(1)
+		wgDefer.Wait()
 
 	}
 
@@ -120,7 +130,7 @@ func (p *peer) Done(ctx context.Context, dm *ping.DoneMessage) (*ping.Reply, err
 }
 
 func (p *peer) sendPingToAll() {
-	p.wantsToAccessCriticalSection = true
+
 	request := &ping.Request{Id: p.id, Timestamp: p.timestamp}
 	for _, client := range p.clients {
 
@@ -137,7 +147,6 @@ func (p *peer) sendPingToAll() {
 		time.Sleep(2 * time.Second)
 	}
 	wgRequests.Wait()
-	wgDefer.Wait()
 	p.criticalSection()
 
 }
@@ -150,11 +159,16 @@ func (p *peer) criticalSection() {
 	time.Sleep(5 * time.Second)
 
 	log.Printf("has exited critical section------")
-	p.wantsToAccessCriticalSection = false
 
-	doneMessage := &ping.DoneMessage{DoneBool: true} //here you signal to the other peers that you are done with the critical section
-	for _, client := range p.clients {
-		client.Done(p.ctx, doneMessage)
+	if p.defering {
+		p.defering = false
+		wgDefer.Done()
 	}
+	p.requesting = false
+
+	// doneMessage := &ping.DoneMessage{DoneBool: true} //here you signal to the other peers that you are done with the critical section
+	// for _, client := range p.clients {
+	// 	client.Done(p.ctx, doneMessage)
+	// }
 
 }
